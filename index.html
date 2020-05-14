@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html leng="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TodoMVC</title>
+  <!-- 1.引入外部css样式 -->
+  <link rel="stylesheet" href="index.css">
+  <!-- 2.引入需要的Vue.js -->
+  <script src="vue.min.js"></script>
+  <style>
+    [v-cloak] {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+  <section class="todoapp">
+    <header class="header">
+      <h1>待办事项</h1>
+      <input class="new-todo" autofocus autocomplete="off" placeholder="需要做的事?" v-model="newTodo"
+        @keyup.enter="addTodo" />
+    </header>
+    <section class="main" v-show="todos.length" v-cloak>
+      <input id="toggle-all" class="toggle-all" type="checkbox" v-model="allDone" />
+      <label for="toggle-all"></label>
+      <ul class="todo-list">
+        <li v-for="todo in filteredTodos" class="todo" :key="todo.id"
+          :class="{ completed: todo.completed, editing: todo == editedTodo }">
+          <div class="view">
+            <input class="toggle" type="checkbox" v-model="todo.completed" />
+            <label @dblclick="editTodo(todo)">{{ todo.title }}</label>
+            <button class="destroy" @click="removeTodo(todo)"></button>
+          </div>
+          <input class="edit" type="text" v-model="todo.title" v-todo-focus="todo == editedTodo" @blur="doneEdit(todo)"
+            @keyup.enter="doneEdit(todo)" @keyup.esc="cancelEdit(todo)" />
+        </li>
+      </ul>
+    </section>
+    <footer class="footer" v-show="todos.length" v-cloak>
+      <span class="todo-count">
+        剩下<strong>{{ remaining }}</strong> 项
+      </span>
+      <ul class="filters">
+        <li>
+          <a href="#/all" :class="{ selected: visibility == 'all' }">All</a>
+        </li>
+        <li>
+          <a href="#/active" :class="{ selected: visibility == 'active' }">激活</a>
+        </li>
+        <li>
+          <a href="#/completed" :class="{ selected: visibility == 'completed' }">完成</a>
+        </li>
+      </ul>
+      <button class="clear-completed" @click="removeCompleted" v-show="todos.length > remaining">
+        删除已完成
+      </button>
+    </footer>
+  </section>
+
+  <script>
+    // 完全符合规范的TodoMVC，具有本地存储持久性
+    // 以及大约120行有效JavaScript中基于散列的路由。
+
+    // 定位持久性
+    var STORAGE_KEY = "todos-vuejs-2.0";
+    var todoStorage = {
+      fetch: function () {
+        var todos = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        todos.forEach(function (todo, index) {
+          todo.id = index;
+        });
+        todoStorage.uid = todos.length;
+        return todos;
+      },
+      save: function (todos) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+      }
+    };
+
+    // 可见性过滤器
+    var filters = {
+      all: function (todos) {
+        return todos;
+      },
+      active: function (todos) {
+        return todos.filter(function (todo) {
+          return !todo.completed;
+        });
+      },
+      completed: function (todos) {
+        return todos.filter(function (todo) {
+          return todo.completed;
+        });
+      }
+    };
+
+    // app Vue 实例
+    var app = new Vue({
+      // 应用程序初始状态
+      data: {
+        todos: todoStorage.fetch(),
+        newTodo: "",
+        editedTodo: null,
+        visibility: "all"
+      },
+
+      // watch todos change for localStorage persistence
+      watch: {
+        todos: {
+          handler: function (todos) {
+            todoStorage.save(todos);
+          },
+          deep: true
+        }
+      },
+
+      // 计算属性
+      // http://vuejs.org/guide/computed.html
+      computed: {
+        filteredTodos: function () {
+          return filters[this.visibility](this.todos);
+        },
+        remaining: function () {
+          return filters.active(this.todos).length;
+        },
+        allDone: {
+          get: function () {
+            return this.remaining === 0;
+          },
+          set: function (value) {
+            this.todos.forEach(function (todo) {
+              todo.completed = value;
+            });
+          }
+        }
+      },
+
+      filters: {
+        pluralize: function (n) {
+          return n === 1 ? "item" : "items";
+        }
+      },
+
+      // 实现数据逻辑的方法。
+      // 注意这里根本没有DOM操作。
+      methods: {
+        addTodo: function () {
+          var value = this.newTodo && this.newTodo.trim();
+          if (!value) {
+            return;
+          }
+          this.todos.push({
+            id: todoStorage.uid++,
+            title: value,
+            completed: false
+          });
+          this.newTodo = "";
+        },
+
+        removeTodo: function (todo) {
+          this.todos.splice(this.todos.indexOf(todo), 1);
+        },
+
+        editTodo: function (todo) {
+          this.beforeEditCache = todo.title;
+          this.editedTodo = todo;
+        },
+
+        doneEdit: function (todo) {
+          if (!this.editedTodo) {
+            return;
+          }
+          this.editedTodo = null;
+          todo.title = todo.title.trim();
+          if (!todo.title) {
+            this.removeTodo(todo);
+          }
+        },
+
+        cancelEdit: function (todo) {
+          this.editedTodo = null;
+          todo.title = this.beforeEditCache;
+        },
+
+        removeCompleted: function () {
+          this.todos = filters.active(this.todos);
+        }
+      },
+
+      // 等待DOM更新的自定义指令
+      // 在专注于输入字段之前。
+      // http://vuejs.org/guide/custom-directive.html
+      directives: {
+        "todo-focus": function (el, binding) {
+          if (binding.value) {
+            el.focus();
+          }
+        }
+      }
+    });
+
+    // 处理路由
+    function onHashChange() {
+      var visibility = window.location.hash.replace(/#\/?/, "");
+      if (filters[visibility]) {
+        app.visibility = visibility;
+      } else {
+        window.location.hash = "";
+        app.visibility = "all";
+      }
+    }
+
+    window.addEventListener("hashchange", onHashChange);
+    onHashChange();
+
+    // mount
+    app.$mount(".todoapp");
+  </script>
+</body>
+
+</html>
